@@ -22,6 +22,8 @@
     --chalkface: "Cabin Sketch", "Kalam", "Segoe Print", cursive;
   }
   [hidden] { display: none !important; }
+  *, *::before, *::after { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
   html, body { height: 100%; }
   body {
     margin: 0; background: var(--board-deep); color: var(--chalk);
@@ -69,7 +71,7 @@
     border: 3px solid var(--ink); border-radius: 12px 14px 10px 16px; padding: 14px 20px 12px;
     box-shadow: 3px 4px 0 var(--ink); cursor: pointer; letter-spacing: .04em;
   }
-  @media (hover: none) { #hideBtn .keys { display: none; } }
+  @media (hover: none) { .keys { display: none; } }
   #hideBtn small { display: block; font: 400 12px/1.2 var(--hand); letter-spacing: 0; margin-top: 3px; color: var(--pencil); }
   #hideBtn:active { transform: translate(2px, 3px); box-shadow: 1px 1px 0 var(--ink); }
   #hideBtn:focus-visible, .btn:focus-visible { outline: 3px dashed var(--gold); outline-offset: 3px; }
@@ -168,8 +170,8 @@
     <h1>Classroom Cricket</h1>
     <p class="sub">Hardcover register for a bat. Your bench-mate's eraser for a ball. Ma'am is somewhere in the corridor.</p>
     <ol>
-      <li><kbd>Space</kbd> or tap to swing. Time it right for a six.</li>
-      <li>Hear footsteps? See a shadow at the door? <kbd>H</kbd> or <b>HIDE</b>, fast.</li>
+      <li><span class="keys"><kbd>Space</kbd> or </span>tap to swing. Time it right for a six.</li>
+      <li>Hear footsteps? See a shadow at the door? <span class="keys"><kbd>H</kbd> or </span><b>HIDE</b>, fast.</li>
       <li>Sixes are loud. The fan is old. The tube light is older.</li>
     </ol>
     <p class="note">Survive 5 overs until the bell. Most people don't.</p>
