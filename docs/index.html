@@ -90,12 +90,12 @@
 
   /* Overlays: notebook pages */
   .overlay {
-    position: fixed; inset: 0; z-index: 5; display: grid; place-items: center;
+    position: fixed; inset: 0; z-index: 5; display: grid; justify-items: center;
     padding: 16px; background: rgba(20, 32, 26, .55); backdrop-filter: blur(2px);
     overflow-y: auto; overflow-x: hidden;
   }
   .page {
-    position: relative; width: min(460px, 100%); background: var(--paper); color: var(--ink);
+    position: relative; margin-block: auto; width: min(460px, 100%); background: var(--paper); color: var(--ink);
     background-image: repeating-linear-gradient(transparent 0 29px, var(--rule) 29px 30px);
     background-position: 0 58px;
     padding: 22px 24px 22px 56px; box-shadow: 0 18px 40px rgba(0,0,0,.45); border-radius: 3px;
@@ -116,7 +116,7 @@
   .page kbd { font: 700 13px var(--hand); border: 1.5px solid var(--ink); border-radius: 4px; padding: 0 5px; background: #fff8; }
   .page .note { font-size: 14px; line-height: 30px; color: var(--pencil); margin: 0 0 12px; }
   .row { display: flex; gap: 12px; flex-wrap: wrap; }
-  .batpick { border: 0; margin: 0 0 16px; padding: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .batpick { border: 0; margin: 0 0 16px; padding: 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
   .batpick legend { font: 700 13px var(--hand); letter-spacing: .12em; text-transform: uppercase; color: var(--margin); padding: 0; margin-bottom: 6px; }
   .batpick label { position: relative; cursor: pointer; }
   .batpick input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
@@ -151,6 +151,8 @@
   .best { font-size: 14px; color: var(--pencil); margin: 10px 0 0; line-height: 20px; }
 
   @media (max-width: 520px) {
+    .batpick { grid-template-columns: 1fr; gap: 6px; }
+    .batpick span { padding: 6px 10px; }
     #slip { min-width: 120px; padding-left: 26px; }
     #slip .runs { font-size: 28px; }
     #risk { padding: 6px 9px 8px; }
@@ -187,7 +189,7 @@
   <div class="page">
     <p class="eyebrow">Period 4 &middot; Science &middot; Class 8-B</p>
     <h1>Classroom Cricket</h1>
-    <p class="sub">A register or a steel bottle for a bat. Your bench-mate's eraser for a ball. Ma'am is somewhere in the corridor.</p>
+    <p class="sub">A register, a steel bottle or a geometry box for a bat. Your bench-mate's eraser for a ball. Ma'am is somewhere in the corridor.</p>
     <ol>
       <li><span class="keys"><kbd>Space</kbd> or </span>tap to swing. Time it right for a six.</li>
       <li>Hear footsteps? See a shadow at the door? <span class="keys"><kbd>H</kbd> or </span><b>HIDE</b>, fast.</li>
@@ -198,6 +200,7 @@
       <legend>Pick your bat</legend>
       <label><input type="radio" name="bat" value="register"><span><b>Hardcover register</b><small>Wide and forgiving. The classic.</small></span></label>
       <label><input type="radio" name="bat" value="bottle"><span><b>Steel water bottle</b><small>Thin and loud. Good contact goes for six.</small></span></label>
+      <label><input type="radio" name="bat" value="box"><span><b>Geometry box</b><small>Easy contact, lots of fours. Rattles. Spills.</small></span></label>
     </fieldset>
     <div class="row"><button class="btn" id="startBtn" type="button">Take guard</button></div>
   </div>
@@ -219,6 +222,7 @@
       <legend>Pick your bat</legend>
       <label><input type="radio" name="bat2" value="register"><span><b>Hardcover register</b><small>Wide and forgiving. The classic.</small></span></label>
       <label><input type="radio" name="bat2" value="bottle"><span><b>Steel water bottle</b><small>Thin and loud. Good contact goes for six.</small></span></label>
+      <label><input type="radio" name="bat2" value="box"><span><b>Geometry box</b><small>Easy contact, lots of fours. Rattles. Spills.</small></span></label>
     </fieldset>
     <div class="row">
       <button class="btn" id="againBtn" type="button">Bat again</button>
@@ -242,9 +246,10 @@
   const BATS = {
     register: { six: 45, four: 95, edge: 165, name: 'a hardcover register' },
     bottle: { six: 75, four: 110, edge: 140, name: 'a steel water bottle' },
+    box: { six: 30, four: 120, edge: 190, name: 'a geometry box' },
   };
   let batKind = 'register';
-  try { if (localStorage.getItem('cc-bat') === 'bottle') batKind = 'bottle'; } catch (e) {}
+  try { const saved = localStorage.getItem('cc-bat'); if (saved === 'bottle' || saved === 'box') batKind = saved; } catch (e) {}
 
   // ---------- helpers ----------
   const rand = (a, b) => a + Math.random() * (b - a);
@@ -423,6 +428,7 @@
         g.connect(A.master); o.start(t + st); o.stop(t + st + len + .05);
       }); },
     clink(power) { if (!A.ctx) return; const t = A.ctx.currentTime; [1180, 2870, 4410].forEach((fr, i) => tone(t, 'sine', fr, 0, .2 * power / (i + 1), .5 - i * .12)); },
+    rattle(power) { if (!A.ctx) return; const t = A.ctx.currentTime; for (let i = 0; i < 9; i++) noiseHit(t + i * rand(.018, .032), 'bandpass', rand(2500, 5200), 4, .12 * power, .02); tone(t, 'square', 380, 260, .05 * power, .07); },
     ooh(big) { if (!A.ctx) return; const ac = A.ctx, t = ac.currentTime;
       for (let i = 0; i < 5; i++) { const o = ac.createOscillator(); o.type = 'sawtooth'; const b = rand(190, 330); o.frequency.setValueAtTime(b, t); o.frequency.linearRampToValueAtTime(b * (big ? 1.25 : .85), t + .7);
         const fl = ac.createBiquadFilter(); fl.type = 'bandpass'; fl.frequency.value = 650; fl.Q.value = 3; const g = ac.createGain(); env(g, t + rand(0, .08), .12, big ? .05 : .03, .75);
@@ -482,6 +488,15 @@
   function contactNoise(power) {
     S.thwack(power);
     if (batKind === 'bottle') { S.clink(power); G.teacher.next -= .6 * power; }
+    if (batKind === 'box') { S.rattle(power); G.teacher.next -= .5 * power; if (power >= .75 && Math.random() < .6) spillBox(); }
+  }
+  const SPILL_LINES = ['There goes the compass.', 'Protractor overboard.', 'The divider is under Pinky’s bench now.', 'Half a pencil. Gone.'];
+  function spillBox() {   // the lid pops and the instruments go flying
+    const hp = hitPoint(), tools = ['compass', 'protractor', 'pencil', 'divider', 'sharpener'];
+    for (let i = 0; i < 3; i++) G.parts.push({ tool: pick(tools), x: hp.x + rand(-20, 20), y: hp.y - 40, vx: rand(-260, 260), vy: rand(-620, -380), g: 1300,
+      life: 1.6, t: 0, size: 1, rot: rand(0, 6), vr: rand(-10, 10) });
+    G.boxOpen = G.t;
+    if (Math.random() < .5) G.captions.push({ text: pick(SPILL_LINES), t: -.3, life: 1.6 });
   }
   function crashChance() { return clamp(.05 + .14 * G.streak6 + .03 * G.sixes, 0, .85); }
 
@@ -1126,6 +1141,32 @@
     drawBat(time, h);
   }
 
+  function drawBox() {
+    const L = 200, w = 118, open = G && G.boxOpen != null ? clamp(1 - (G.t - G.boxOpen) / .5, 0, 1) : 0;
+    ctx.fillStyle = '#23407A'; ctx.beginPath(); ctx.roundRect(-w / 2, -L, w, L, 6); ctx.fill();          // printed tin
+    ctx.fillStyle = '#E9B949'; ctx.fillRect(-w / 2, -L + 26, w, 10); ctx.fillRect(-w / 2, -L + 150, w, 6);
+    ctx.fillStyle = '#F4EEDB'; ctx.fillRect(-w / 2 + 6, -L + 4, w - 12, 16);                              // ruler printed on the lid edge
+    ctx.strokeStyle = '#1F2B4A'; ctx.lineWidth = 1; for (let i = 0; i < 14; i++) { const x = -w / 2 + 8 + i * 7.5; ctx.beginPath(); ctx.moveTo(x, -L + 4); ctx.lineTo(x, -L + (i % 2 ? 10 : 14)); ctx.stroke(); }
+    ctx.save(); ctx.translate(0, -L + 92); ctx.rotate(-Math.PI / 2); ctx.fillStyle = '#F4EEDB'; ctx.font = '700 15px "Cabin Sketch", cursive'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('GEOMETRY', 0, -18); ctx.fillText('BOX', 0, 4); ctx.restore();
+    ctx.strokeStyle = 'rgba(255,255,255,.25)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(-w / 2 + 3, -L + 44); ctx.lineTo(w / 2 - 3, -L + 44); ctx.stroke();   // lid seam
+    if (open > 0) {   // lid flapping open after a spill
+      ctx.save(); ctx.translate(w / 2, -L + 44); ctx.rotate(-open * 1.1); ctx.fillStyle = '#2E5AA8'; ctx.fillRect(-w, -44, w, 44); ctx.fillStyle = '#E9B949'; ctx.fillRect(-w, -18, w, 8); ctx.restore();
+    }
+  }
+  function drawTool(p) {
+    ctx.strokeStyle = '#7C868C'; ctx.fillStyle = '#B5BFC4'; ctx.lineWidth = 3; ctx.lineCap = 'round';
+    if (p.tool === 'compass' || p.tool === 'divider') {
+      ctx.beginPath(); ctx.moveTo(0, -14); ctx.lineTo(-8, 14); ctx.moveTo(0, -14); ctx.lineTo(8, 14); ctx.stroke();
+      ctx.beginPath(); ctx.arc(0, -16, 3.5, 0, 7); ctx.fill();
+      if (p.tool === 'compass') { ctx.fillStyle = '#E3B23C'; ctx.fillRect(6, 8, 4, 9); }
+    } else if (p.tool === 'protractor') {
+      ctx.fillStyle = 'rgba(210,235,245,.8)'; ctx.strokeStyle = '#6D8FA8'; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.arc(0, 6, 16, Math.PI, 0); ctx.closePath(); ctx.fill(); ctx.stroke();
+    } else if (p.tool === 'pencil') {
+      ctx.fillStyle = '#E3B23C'; ctx.fillRect(-15, -3, 24, 6); ctx.fillStyle = '#E8C9A0'; ctx.beginPath(); ctx.moveTo(9, -3); ctx.lineTo(16, 0); ctx.lineTo(9, 3); ctx.fill();
+    } else { ctx.fillStyle = '#C8323A'; ctx.fillRect(-5, -5, 10, 10); }
+  }
   function drawBottle() {
     const L = BAT_LEN, w = 60;
     const g = ctx.createLinearGradient(-w / 2, 0, w / 2, 0);
@@ -1152,7 +1193,7 @@
       else a = BAT_REST + Math.sin(time / 380) * .03;
     }
     ctx.save(); ctx.translate(p.x, p.y + h * 340); ctx.rotate(a); ctx.scale(f, f);
-    if (batKind === 'bottle') drawBottle(); else {
+    if (batKind === 'bottle') drawBottle(); else if (batKind === 'box') drawBox(); else {
     // hardcover register
     ctx.fillStyle = '#6E1E22'; ctx.beginPath(); ctx.roundRect(-BAT_W / 2, -BAT_LEN, BAT_W, BAT_LEN, 5); ctx.fill();
     ctx.fillStyle = '#F4EEDB'; ctx.fillRect(BAT_W / 2 - 2, -BAT_LEN + 5, 7, BAT_LEN - 10);   // page edges
@@ -1174,7 +1215,8 @@
     if (!G) return;
     G.parts.forEach(p => {
       ctx.save(); ctx.globalAlpha = clamp(1 - p.t / p.life, 0, 1); ctx.translate(p.x, p.y); ctx.rotate(p.rot); ctx.fillStyle = p.color;
-      if (p.shard) { ctx.beginPath(); ctx.moveTo(-p.size, 0); ctx.lineTo(0, -p.size * 1.6); ctx.lineTo(p.size, p.size * .4); ctx.fill(); } else ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size);
+      if (p.tool) { ctx.scale(1.7, 1.7); drawTool(p); }
+      else if (p.shard) { ctx.beginPath(); ctx.moveTo(-p.size, 0); ctx.lineTo(0, -p.size * 1.6); ctx.lineTo(p.size, p.size * .4); ctx.fill(); } else ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size);
       ctx.restore();
     });
     G.pops.forEach(p => {
