@@ -51,6 +51,7 @@
   #slip .last span.b6 { background: var(--ink); color: var(--paper); }
   #slip .last span.b4 { border-color: #2f6d3c; color: #2f6d3c; }
   #risk {
+    background: rgba(30, 51, 40, .82); padding: 8px 12px 10px; border-radius: 8px;
     top: calc(14px + env(safe-area-inset-top, 0px)); right: 16px; text-align: right;
     font-family: var(--chalkface); color: var(--chalk); text-shadow: 0 1px 0 rgba(0,0,0,.4);
   }
@@ -68,6 +69,7 @@
     border: 3px solid var(--ink); border-radius: 12px 14px 10px 16px; padding: 14px 20px 12px;
     box-shadow: 3px 4px 0 var(--ink); cursor: pointer; letter-spacing: .04em;
   }
+  @media (hover: none) { #hideBtn .keys { display: none; } }
   #hideBtn small { display: block; font: 400 12px/1.2 var(--hand); letter-spacing: 0; margin-top: 3px; color: var(--pencil); }
   #hideBtn:active { transform: translate(2px, 3px); box-shadow: 1px 1px 0 var(--ink); }
   #hideBtn:focus-visible, .btn:focus-visible { outline: 3px dashed var(--gold); outline-offset: 3px; }
@@ -132,8 +134,10 @@
   @media (max-width: 520px) {
     #slip { min-width: 120px; padding-left: 26px; }
     #slip .runs { font-size: 28px; }
-    #risk .pct { font-size: 24px; }
-    #risk .bar { width: 96px; }
+    #risk { padding: 6px 9px 8px; }
+    #risk .lbl { font-size: 12px; max-width: 96px; margin-left: auto; line-height: 1.15; }
+    #risk .pct { font-size: 22px; }
+    #risk .bar { width: 84px; }
     .page { padding-left: 46px; padding-right: 16px; }
     .page::before { left: 34px; }
     .page::after { left: 8px; }
@@ -155,7 +159,7 @@
   <div class="pct" id="riskPct">5%</div>
   <div class="bar"><i id="riskBar"></i></div>
 </div>
-<button id="hideBtn" type="button" hidden>HIDE<small>H / &darr; &middot; act innocent</small></button>
+<button id="hideBtn" type="button" hidden>HIDE<small><span class="keys">H / &darr; &middot; </span>act innocent</small></button>
 <button id="muteBtn" type="button" hidden>sound on</button>
 
 <div class="overlay" id="title">
@@ -852,9 +856,17 @@
     ctx.fillStyle = '#B5302A'; ctx.beginPath(); ctx.arc(0, -181, 2, 0, 7); ctx.fill(); // bindi
     ctx.strokeStyle = '#3A1A12'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(-5, -162); ctx.lineTo(5, -162); ctx.stroke();
     ctx.restore();
-    // speech bubble
+    bubble = { x, footY, s, T };   // drawn last, so the door leaf never covers it
+  }
+
+  let bubble = null;
+  function drawBubble() {
+    if (!bubble) return;
+    const { x, footY, s, T } = bubble; bubble = null;
     if (T.state === 'check' && T.line && T.t > .25) {
-      ctx.save(); ctx.font = `700 22px "Kalam", cursive`; const w = ctx.measureText(T.line).width + 28;
+      ctx.save(); let fs = 22; ctx.font = `700 ${fs}px "Kalam", cursive`;
+      while (ctx.measureText(T.line).width + 28 > VW - 20 && fs > 14) { fs--; ctx.font = `700 ${fs}px "Kalam", cursive`; }
+      const w = ctx.measureText(T.line).width + 28;
       const bx = clamp(x - w - 20, 10, cx + VW / 2 - w - 10), by = footY - 250 * s;
       ctx.fillStyle = '#FFFDF4'; ctx.strokeStyle = '#1F2B4A'; ctx.lineWidth = 2.5;
       ctx.beginPath(); ctx.roundRect(bx, by, w, 44, 14); ctx.fill(); ctx.stroke();
@@ -1074,6 +1086,7 @@
     }
     if (G && G.broken === 'tube') { ctx.fillStyle = 'rgba(10,15,25,.38)'; ctx.fillRect(cx - VW / 2, 0, VW, 1000); }
     drawForeground(time);
+    drawBubble();
     drawFx();
     ctx.restore();
   }
