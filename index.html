@@ -118,6 +118,7 @@
   .batpick small { display: block; font-size: 12.5px; color: var(--pencil); margin-top: 3px; }
   .batpick input:checked + span { background: var(--ink); color: var(--paper); box-shadow: 3px 3px 0 var(--margin); }
   .batpick input:checked + span small { color: #cfd6e6; }
+  .batpick .batdesc { display: none; grid-column: 1 / -1; margin: 2px 0 0; font-size: 13.5px; line-height: 1.3; color: var(--pencil); }
   .batpick input:focus-visible + span { outline: 3px dashed var(--gold); outline-offset: 2px; }
   .btn {
     font: 700 20px/1 var(--chalkface); color: var(--paper); background: var(--ink);
@@ -144,8 +145,12 @@
   .best { font-size: 14px; color: var(--pencil); margin: 10px 0 0; line-height: 20px; }
 
   @media (max-width: 520px) {
-    .batpick { grid-template-columns: 1fr; gap: 6px; }
-    .batpick span { padding: 6px 10px; }
+    .batpick { grid-template-columns: repeat(3, 1fr); gap: 6px; }
+    .batpick span { padding: 7px 4px; text-align: center; display: grid; place-items: center; }
+    .batpick b { font-size: 14px; }
+    .batpick small { display: none; }
+    .batpick .batdesc { display: block; }
+    .page h1 { font-size: 36px; }
     #slip { min-width: 120px; padding-left: 26px; }
     #slip .runs { font-size: 28px; }
     #risk { padding: 6px 9px 8px; }
@@ -181,18 +186,19 @@
     <p class="eyebrow">Period 4 &middot; Science &middot; Class 8-B</p>
     <h1>Classroom Cricket</h1>
     <p class="sub">A register, a steel bottle or a geometry box for a bat. Your bench-mate's eraser for a ball. Ma'am is somewhere in the corridor.</p>
+    <fieldset class="batpick">
+      <legend>Pick your bat</legend>
+      <label><input type="radio" name="bat" value="register"><span><b>Register</b><small>Wide and forgiving. The classic.</small></span></label>
+      <label><input type="radio" name="bat" value="bottle"><span><b>Steel bottle</b><small>Thin and loud. Good contact goes for six.</small></span></label>
+      <label><input type="radio" name="bat" value="box"><span><b>Geometry box</b><small>Easy contact, lots of fours. Rattles. Spills.</small></span></label>
+      <p class="batdesc"></p>
+    </fieldset>
     <ol>
       <li><span class="keys"><kbd>Space</kbd> or </span>tap to swing. Time it right for a six.</li>
       <li>Hear footsteps? See a shadow at the door? <span class="keys"><kbd>H</kbd> or </span><b>HIDE</b>, fast.</li>
       <li>Sixes are loud. The fan is old. The tube light is older.</li>
     </ol>
     <p class="note">Survive 5 overs until the bell. Most people don't.</p>
-    <fieldset class="batpick">
-      <legend>Pick your bat</legend>
-      <label><input type="radio" name="bat" value="register"><span><b>Hardcover register</b><small>Wide and forgiving. The classic.</small></span></label>
-      <label><input type="radio" name="bat" value="bottle"><span><b>Steel water bottle</b><small>Thin and loud. Good contact goes for six.</small></span></label>
-      <label><input type="radio" name="bat" value="box"><span><b>Geometry box</b><small>Easy contact, lots of fours. Rattles. Spills.</small></span></label>
-    </fieldset>
     <div class="row"><button class="btn" id="startBtn" type="button">Take guard</button></div>
   </div>
 </div>
@@ -211,9 +217,10 @@
     </div>
     <fieldset class="batpick">
       <legend>Pick your bat</legend>
-      <label><input type="radio" name="bat2" value="register"><span><b>Hardcover register</b><small>Wide and forgiving. The classic.</small></span></label>
-      <label><input type="radio" name="bat2" value="bottle"><span><b>Steel water bottle</b><small>Thin and loud. Good contact goes for six.</small></span></label>
+      <label><input type="radio" name="bat2" value="register"><span><b>Register</b><small>Wide and forgiving. The classic.</small></span></label>
+      <label><input type="radio" name="bat2" value="bottle"><span><b>Steel bottle</b><small>Thin and loud. Good contact goes for six.</small></span></label>
       <label><input type="radio" name="bat2" value="box"><span><b>Geometry box</b><small>Easy contact, lots of fours. Rattles. Spills.</small></span></label>
+      <p class="batdesc"></p>
     </fieldset>
     <div class="row">
       <button class="btn" id="againBtn" type="button">Bat again</button>
@@ -1281,7 +1288,13 @@
   cv.addEventListener('pointerdown', e => { e.preventDefault(); audioInit(); swing(); });
   $('hideBtn').addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); audioInit(); hide(); });
   $('hideBtn').addEventListener('click', e => { if (e.detail === 0) hide(); });   // keyboard activation
-  function syncBatPick() { document.querySelectorAll('.batpick input').forEach(i => { i.checked = i.value === batKind; }); }
+  function syncBatPick() {
+    document.querySelectorAll('.batpick input').forEach(i => { i.checked = i.value === batKind; });
+    document.querySelectorAll('.batpick').forEach(fs => {
+      const on = fs.querySelector('input:checked'), d = fs.querySelector('.batdesc');
+      if (on && d) d.textContent = on.parentElement.querySelector('small').textContent;
+    });
+  }
   document.querySelectorAll('.batpick input').forEach(i => i.addEventListener('change', () => {
     batKind = i.value; syncBatPick();
     try { localStorage.setItem('cc-bat', batKind); } catch (e) {}
