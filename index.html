@@ -109,6 +109,16 @@
   .page kbd { font: 700 13px var(--hand); border: 1.5px solid var(--ink); border-radius: 4px; padding: 0 5px; background: #fff8; }
   .page .note { font-size: 14px; line-height: 30px; color: var(--pencil); margin: 0 0 12px; }
   .row { display: flex; gap: 12px; flex-wrap: wrap; }
+  .batpick { border: 0; margin: 0 0 16px; padding: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .batpick legend { font: 700 13px var(--hand); letter-spacing: .12em; text-transform: uppercase; color: var(--margin); padding: 0; margin-bottom: 6px; }
+  .batpick label { position: relative; cursor: pointer; }
+  .batpick input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+  .batpick span { display: block; height: 100%; border: 2px solid var(--ink); border-radius: 10px 12px 9px 13px; padding: 8px 10px; background: #fffdf6; line-height: 1.2; }
+  .batpick b { display: block; font-size: 15px; }
+  .batpick small { display: block; font-size: 12.5px; color: var(--pencil); margin-top: 3px; }
+  .batpick input:checked + span { background: var(--ink); color: var(--paper); box-shadow: 3px 3px 0 var(--margin); }
+  .batpick input:checked + span small { color: #cfd6e6; }
+  .batpick input:focus-visible + span { outline: 3px dashed var(--gold); outline-offset: 2px; }
   .btn {
     font: 700 20px/1 var(--chalkface); color: var(--paper); background: var(--ink);
     border: 0; border-radius: 10px 12px 9px 14px; padding: 14px 22px 12px; cursor: pointer;
@@ -168,13 +178,18 @@
   <div class="page">
     <p class="eyebrow">Period 4 &middot; Science &middot; Class 8-B</p>
     <h1>Classroom Cricket</h1>
-    <p class="sub">Hardcover register for a bat. Your bench-mate's eraser for a ball. Ma'am is somewhere in the corridor.</p>
+    <p class="sub">A register or a steel bottle for a bat. Your bench-mate's eraser for a ball. Ma'am is somewhere in the corridor.</p>
     <ol>
       <li><span class="keys"><kbd>Space</kbd> or </span>tap to swing. Time it right for a six.</li>
       <li>Hear footsteps? See a shadow at the door? <span class="keys"><kbd>H</kbd> or </span><b>HIDE</b>, fast.</li>
       <li>Sixes are loud. The fan is old. The tube light is older.</li>
     </ol>
     <p class="note">Survive 5 overs until the bell. Most people don't.</p>
+    <fieldset class="batpick">
+      <legend>Pick your bat</legend>
+      <label><input type="radio" name="bat" value="register"><span><b>Hardcover register</b><small>Wide and forgiving. The classic.</small></span></label>
+      <label><input type="radio" name="bat" value="bottle"><span><b>Steel water bottle</b><small>Thin and loud. Good contact goes for six.</small></span></label>
+    </fieldset>
     <div class="row"><button class="btn" id="startBtn" type="button">Take guard</button></div>
   </div>
 </div>
@@ -191,6 +206,11 @@
       <div><b id="s6">0</b>sixes</div>
       <div><b id="sSR">0</b>strike rate</div>
     </div>
+    <fieldset class="batpick">
+      <legend>Pick your bat</legend>
+      <label><input type="radio" name="bat2" value="register"><span><b>Hardcover register</b><small>Wide and forgiving. The classic.</small></span></label>
+      <label><input type="radio" name="bat2" value="bottle"><span><b>Steel water bottle</b><small>Thin and loud. Good contact goes for six.</small></span></label>
+    </fieldset>
     <div class="row">
       <button class="btn" id="againBtn" type="button">Bat again</button>
       <button class="btn alt" id="shareBtn" type="button">Copy score</button>
@@ -209,7 +229,13 @@
 
   // ---------- tuning ----------
   const TOTAL_BALLS = 30;               // 5 overs, then the bell
-  const WIN_PERFECT = 45, WIN_GOOD = 95, WIN_EDGE = 165;   // ms either side of arrival
+  // timing windows in ms either side of arrival. The bottle is thin (less total contact) but lands sixes more easily.
+  const BATS = {
+    register: { six: 45, four: 95, edge: 165, name: 'a hardcover register' },
+    bottle: { six: 75, four: 110, edge: 140, name: 'a steel water bottle' },
+  };
+  let batKind = 'register';
+  try { if (localStorage.getItem('cc-bat') === 'bottle') batKind = 'bottle'; } catch (e) {}
 
   // ---------- helpers ----------
   const rand = (a, b) => a + Math.random() * (b - a);
@@ -387,6 +413,7 @@
         [[kind === 'ow' ? 750 : 950, 5], [kind === 'ow' ? 1100 : 1600, 6]].forEach(([fq, q]) => { const bp = ac.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = fq; bp.Q.value = q; o.connect(bp); bp.connect(g); });
         g.connect(A.master); o.start(t + st); o.stop(t + st + len + .05);
       }); },
+    clink(power) { if (!A.ctx) return; const t = A.ctx.currentTime; [1180, 2870, 4410].forEach((fr, i) => tone(t, 'sine', fr, 0, .2 * power / (i + 1), .5 - i * .12)); },
     ooh(big) { if (!A.ctx) return; const ac = A.ctx, t = ac.currentTime;
       for (let i = 0; i < 5; i++) { const o = ac.createOscillator(); o.type = 'sawtooth'; const b = rand(190, 330); o.frequency.setValueAtTime(b, t); o.frequency.linearRampToValueAtTime(b * (big ? 1.25 : .85), t + .7);
         const fl = ac.createBiquadFilter(); fl.type = 'bandpass'; fl.frequency.value = 650; fl.Q.value = 3; const g = ac.createGain(); env(g, t + rand(0, .08), .12, big ? .05 : .03, .75);
@@ -435,13 +462,18 @@
     b.swung = true;
     const dt = (G.t - b.T) * 1000;       // negative = early
     const ad = Math.abs(dt);
-    if (ad <= WIN_PERFECT) return scoreShot(b, 6, dt);
-    if (ad <= WIN_GOOD) return scoreShot(b, 4, dt);
-    if (ad <= WIN_EDGE) return scoreShot(b, 1, dt);
+    const W = BATS[batKind];
+    if (ad <= W.six) return scoreShot(b, 6, dt);
+    if (ad <= W.four) return scoreShot(b, 4, dt);
+    if (ad <= W.edge) return scoreShot(b, 1, dt);
     S.whiff();                            // way off: ball carries on as a dot
     b.whiffed = dt < 0 ? 'early' : 'late';
   }
 
+  function contactNoise(power) {
+    S.thwack(power);
+    if (batKind === 'bottle') { S.clink(power); G.teacher.next -= .6 * power; }
+  }
   function crashChance() { return clamp(.05 + .14 * G.streak6 + .03 * G.sixes, 0, .85); }
 
   function scoreShot(b, runs, dt) {
@@ -453,7 +485,7 @@
       if (Math.random() < pc) crash = pick(['fan', 'tube', 'window']);
       target = crash ? crashTarget(crash) : { x: cx + rand(-280, 280) * u, y: rand(40, 130), r: 3 };
       dur = crash ? .55 : .8;
-      S.thwack(1); G.shake = .35;
+      contactNoise(1); G.shake = .35;
       if (!crash) { pop('SIX!', cx, 470, { size: 120, life: 1.3 }); S.ooh(true); G.lookBack = 1.3; }
       G.sixes++; G.streak6++;
       G.teacher.next -= 1.2;   // loud
@@ -465,11 +497,11 @@
         const v = pick(victims); b.bonk = students.indexOf(v) + 1;
         target = { x: v.x, y: v.y - 70 * v.s, r: 4 + 5 * v.s }; dur = .42;
       }
-      S.thwack(.75); pop('FOUR', cx, 480, { size: 90, life: 1.1 });
+      contactNoise(.75); pop('FOUR', cx, 480, { size: 90, life: 1.1 });
       G.fours++; G.streak6 = 0; G.teacher.next -= .5;
     } else {
       target = { x: b.x + (dt < 0 ? -1 : 1) * 160 * u, y: 790, r: 12 }; dur = .5;
-      S.thwack(.35); pop(dt < 0 ? 'early. 1 run' : 'late. 1 run', cx, 500, { size: 44, life: .9 });
+      contactNoise(.35); pop(dt < 0 ? 'early. 1 run' : 'late. 1 run', cx, 500, { size: 44, life: .9 });
       G.streak6 = 0;
     }
     b.fly = { x0: b.x, y0: b.y, r0: b.r, target, dur, t0: G.t, lift: runs === 6 ? 240 : runs === 4 ? 60 : 40 };
@@ -634,7 +666,7 @@
 
   function shareText() {
     const E = ENDINGS[G.ending];
-    return `🏏 Classroom Cricket: ${G.runs} runs off ${G.balls} balls (${overs(G.balls)} ov) before ${E.short}. ${G.fours}×4, ${G.sixes}×6.\nCan you survive till the bell?`;
+    return `🏏 Classroom Cricket: ${G.runs} runs off ${G.balls} balls (${overs(G.balls)} ov) before ${E.short}. ${G.fours}×4, ${G.sixes}×6, batting with ${BATS[batKind].name}.\nCan you survive till the bell?`;
   }
   function share() {
     const text = shareText(), btn = $('shareBtn'), ta = $('shareText');
@@ -677,7 +709,7 @@
       if (b.state === 'flight') {
         const k = (G.t - b.t0) / b.dur;
         const p = ballPos(b, k); b.x = p.x; b.y = p.y; b.r = p.r;
-        if (k > 1 + WIN_EDGE / 1000 / b.dur && !b.passed) {
+        if (k > 1 + BATS[batKind].edge / 1000 / b.dur && !b.passed) {
           b.passed = true; b.swung = true;
           if (G.hideAnim > .5) { S.thud(); pop('ow. dot ball', cx, 520, { size: 40 }); }
           else { S.thud(); pop(b.whiffed ? `too ${b.whiffed}. dot` : 'dot ball', cx, 520, { size: 44 }); }
@@ -1085,6 +1117,22 @@
     drawBat(time, h);
   }
 
+  function drawBottle() {
+    const L = BAT_LEN, w = 60;
+    const g = ctx.createLinearGradient(-w / 2, 0, w / 2, 0);
+    g.addColorStop(0, '#7C868C'); g.addColorStop(.3, '#E9EEF1'); g.addColorStop(.55, '#B5BFC4'); g.addColorStop(1, '#6F797E');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.moveTo(-w / 2, 0); ctx.lineTo(-w / 2, -L + 70);
+    ctx.quadraticCurveTo(-w / 2, -L + 44, -w / 2 + 12, -L + 38); ctx.lineTo(w / 2 - 12, -L + 38);
+    ctx.quadraticCurveTo(w / 2, -L + 44, w / 2, -L + 70); ctx.lineTo(w / 2, 0); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#2E5AA8'; ctx.beginPath(); ctx.roundRect(-w / 2 + 9, -L, w - 18, 42, 6); ctx.fill();          // cap
+    ctx.fillStyle = 'rgba(255,255,255,.25)'; for (let i = 0; i < 5; i++) ctx.fillRect(-w / 2 + 12 + i * 8, -L + 4, 3, 34);
+    ctx.fillStyle = '#F4EEDB'; ctx.save(); ctx.rotate(-.04); ctx.fillRect(-w / 2 + 8, -L + 110, w - 16, 44); ctx.restore();   // name sticker
+    ctx.fillStyle = '#1F2B4A'; ctx.font = '700 10px "Kalam", cursive'; ctx.textBaseline = 'top';
+    ctx.fillText('Name:', -w / 2 + 12, -L + 114); ctx.fillText('8-B', -w / 2 + 12, -L + 132);
+    ctx.strokeStyle = 'rgba(40,50,55,.45)'; ctx.lineWidth = 2;                                               // dents from previous innings
+    ctx.beginPath(); ctx.arc(6, -L + 190, 8, .3, 2.2); ctx.stroke(); ctx.beginPath(); ctx.arc(-10, -L + 88, 6, 3.6, 5.4); ctx.stroke();
+  }
   function drawBat(time, h) {
     const p = batPivot();
     let a = BAT_REST;
@@ -1095,6 +1143,7 @@
       else a = BAT_REST + Math.sin(time / 380) * .03;
     }
     ctx.save(); ctx.translate(p.x, p.y + h * 340); ctx.rotate(a); ctx.scale(f, f);
+    if (batKind === 'bottle') drawBottle(); else {
     // hardcover register
     ctx.fillStyle = '#6E1E22'; ctx.beginPath(); ctx.roundRect(-BAT_W / 2, -BAT_LEN, BAT_W, BAT_LEN, 5); ctx.fill();
     ctx.fillStyle = '#F4EEDB'; ctx.fillRect(BAT_W / 2 - 2, -BAT_LEN + 5, 7, BAT_LEN - 10);   // page edges
@@ -1104,6 +1153,7 @@
     ctx.fillText('RECORD', -BAT_W / 2 + 25, -BAT_LEN + 42);
     ctx.font = '400 10px "Kalam", cursive'; ctx.fillText('Name: ______', -BAT_W / 2 + 25, -BAT_LEN + 60); ctx.fillText('Class: 8-B', -BAT_W / 2 + 25, -BAT_LEN + 76);
     ctx.strokeStyle = 'rgba(255,255,255,.12)'; ctx.lineWidth = 2; ctx.strokeRect(-BAT_W / 2 + 16, -BAT_LEN + 8, BAT_W - 26, BAT_LEN - 16);
+    }
     // hands gripping the bottom
     ctx.fillStyle = '#E9EDF3'; ctx.beginPath(); ctx.roundRect(-60, -30, 120, 70, 20); ctx.fill();
     ctx.fillStyle = '#8D5A3C'; ctx.beginPath(); ctx.ellipse(-8, -58, 34, 22, .2, 0, 7); ctx.fill(); ctx.beginPath(); ctx.ellipse(10, -24, 34, 22, -.1, 0, 7); ctx.fill();
@@ -1182,13 +1232,19 @@
   addEventListener('keydown', e => {
     if (e.repeat) return;
     const k = e.key.toLowerCase();
-    if (!$('title').hidden || !$('end').hidden) { if ((k === 'enter' || k === ' ') && document.activeElement?.tagName !== 'BUTTON') { e.preventDefault(); start(); } return; }
+    if (!$('title').hidden || !$('end').hidden) { if ((k === 'enter' || k === ' ') && !['BUTTON', 'INPUT'].includes(document.activeElement?.tagName)) { e.preventDefault(); start(); } return; }
     if (k === ' ' || k === 'enter' || k === 'arrowup' || k === 'w') { e.preventDefault(); audioInit(); swing(); }
     else if (k === 'h' || k === 'arrowdown' || k === 's') { e.preventDefault(); audioInit(); hide(); }
   });
   cv.addEventListener('pointerdown', e => { e.preventDefault(); audioInit(); swing(); });
   $('hideBtn').addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); audioInit(); hide(); });
   $('hideBtn').addEventListener('click', e => { if (e.detail === 0) hide(); });   // keyboard activation
+  function syncBatPick() { document.querySelectorAll('.batpick input').forEach(i => { i.checked = i.value === batKind; }); }
+  document.querySelectorAll('.batpick input').forEach(i => i.addEventListener('change', () => {
+    batKind = i.value; syncBatPick();
+    try { localStorage.setItem('cc-bat', batKind); } catch (e) {}
+  }));
+  syncBatPick();
   $('startBtn').addEventListener('click', start);
   $('againBtn').addEventListener('click', start);
   $('shareBtn').addEventListener('click', share);
