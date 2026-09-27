@@ -507,6 +507,10 @@
   }
   function crashChance() { return clamp(.05 + .14 * G.streak6 + .03 * G.sixes, 0, .85); }
 
+  function maamHead() {
+    const dw = Math.max(125 * u, 95), dx2 = cx + 395 * u, dx1 = dx2 - dw, sc2 = dw / 92;
+    return { x: (dx1 + dx2) / 2 + dw * .08, y: 560 - 172 * sc2, r: 4 + 3 * sc2 };
+  }
   function scoreShot(b, runs, dt) {
     const p = ballPos(b, clamp((G.t - b.t0) / b.dur, 0, 1));
     b.state = 'hit'; b.x = p.x; b.y = p.y; b.r = p.r; b.hitAt = G.t;
@@ -535,9 +539,25 @@
       contactNoise(.35); pop(dt < 0 ? 'early. 1 run' : 'late. 1 run', cx, 500, { size: 44, life: .9 });
       G.streak6 = 0;
     }
-    b.fly = { x0: b.x, y0: b.y, r0: b.r, target, dur, t0: G.t, lift: runs === 6 ? 240 : runs === 4 ? 60 : 40 };
+    const T = G.teacher;
+    if (runs >= 4 && T.state === 'approach' && !T.fake && T.prox >= .4 && !G.ending) {
+      target = maamHead(); dur = .7; crash = null; b.bonk = 0; b.maam = true;
+      T.dur = Math.max(T.t + .01, T.t + dur - .2);   // door swings open a moment before the ball gets there
+      G.maamShot = true;
+    }
+    b.fly = { x0: b.x, y0: b.y, r0: b.r, target, dur, t0: G.t, lift: b.maam ? 90 : runs === 6 ? 240 : runs === 4 ? 60 : 40 };
     b.crash = crash;
     addBall(runs);
+  }
+  const MAAM_LINES = ['WHO THREW THAT?!', 'WHOSE ERASER IS THIS?!', 'Principal’s office. NOW.'];
+  function hitMaam(x, y) {
+    const T = G.teacher;
+    G.ending = 'maam'; G.endAt = G.t + 3.2; G.shake = .5; G.lookBack = 3.2; G.maamShot = false;
+    T.state = 'check'; T.t = .3; T.prox = 1; T.bonked = G.t; T.line = pick(MAAM_LINES);
+    S.bonk(); S.gasp(); S.ooh(false); setMurmur(0);
+    pop('BONK!', x - 30, y - 30, { size: 64, life: .8, rise: 30, color: '#FFE08A' });
+    burst(x, y, 14, { colors: ['#FFE08A', '#FFFFFF'], spread: 200, up: 240, size: .9, life: .7 });
+    G.captions.push({ text: 'The entire class stopped breathing.', t: .4, life: 2.6, big: true });
   }
   const GRUMBLES = ['Wait till recess.', 'Watch it!', 'My head is not the boundary!', 'Do that again. I dare you.'];
   function bonk(st, x, y) {
@@ -605,6 +625,7 @@
         G.captions.push({ text: '…just the peon walking past.', t: 0, life: 1.8 });
       } else if (!T.fake && k >= 1) {
         T.state = 'check'; T.t = 0; S.creak();
+        if (G.maamShot) { T.line = ''; return; }
         if (T.storm) { T.line = pick(STORM_LINES[G.broken]); G.shake = .3; S.gasp(); G.lookBack = 3; G.endAt = Math.max(G.endAt, G.t + 2.4); return; }
         if (!G.hidden) { T.complaint = null; caught('door'); return; }
         T.line = T.complaint ? `Who hit ${T.complaint}?` : pick(SPEECH_OK); T.complaint = null;
@@ -640,6 +661,10 @@
     window: {
       head: n => `You scored <b>${n}</b> runs before the window didn’t survive.`, short: 'the window didn’t survive', stamp: 'DAMAGE', eyebrow: 'Incident report',
       lines: ['The eraser has left the building. So has your reputation.', 'Glass replacement will come out of your pocket money. For a year.', 'It landed near the staff room. Of course it did.'],
+    },
+    maam: {
+      head: n => `You scored <b>${n}</b> runs before you hit Ma’am. On the head.`, short: 'hitting Ma’am on the head', stamp: 'SUSPENDED', eyebrow: 'Principal’s office',
+      lines: ['Her specs survived. You will not.', 'Your parents have been called. Both of them.', 'The eraser has been kept as evidence.', 'Legends say the whole corridor heard the bonk.'],
     },
     bell: {
       head: n => `You scored <b>${n}</b> runs before the bell rang.`, short: 'the bell rang (not out!)', stamp: 'NOT OUT', eyebrow: 'Last bench legend',
@@ -728,7 +753,9 @@
 
     // throwing cadence
     const T = G.teacher;
-    if (playing && !G.ending && !G.ball && T.state === 'away' && G.t >= G.nextThrowAt) {
+    // the thrower misses the first few footsteps, so a ball can still come while she's on her way
+    const unnoticed = T.state === 'approach' && T.prox < .3 && !T.storm && !T.complaint;
+    if (playing && !G.ending && !G.ball && (T.state === 'away' || (unnoticed && G.balls < TOTAL_BALLS)) && G.t >= G.nextThrowAt) {
       if (G.balls >= TOTAL_BALLS) {
         G.ending = 'bell'; G.endAt = G.t + 3.6; S.bell(); S.cheer(); setMurmur(.09);
         G.captions.push({ text: 'TRRRRRRING — the bell!', t: 0, life: 2.6, big: true }); G.lookBack = 3;
@@ -753,6 +780,7 @@
         b.r = lerp(F.r0, F.target.r, e);
         if (k >= 1) {
           if (b.crash) { doCrash(b.crash, F.target.x, F.target.y); G.ball = null; }
+          else if (b.maam) { hitMaam(F.target.x, F.target.y); G.ball = null; }
           else if (b.bonk) { bonk(students[b.bonk - 1], F.target.x, F.target.y); G.ball = null; G.nextThrowAt = G.t + rand(1.4, 1.9); }
           else { G.ball = null; G.nextThrowAt = G.t + rand(.8, 1.3); }
         }
@@ -961,9 +989,17 @@
     ctx.fillStyle = '#8A5A3F'; ctx.beginPath(); ctx.arc(0, -172, 17, 0, 7); ctx.fill();
     ctx.fillStyle = '#1B1412'; ctx.beginPath(); ctx.arc(0, -178, 17, Math.PI * 1.05, Math.PI * 1.95); ctx.fill();
     ctx.beginPath(); ctx.arc(14, -184, 8, 0, 7); ctx.fill();   // bun
-    // spectacles
+    // spectacles (knocked crooked if she's just been hit)
+    const bonked = T.bonked != null && G && G.ending === 'maam';
+    ctx.save(); if (bonked) { ctx.translate(2, -168); ctx.rotate(.35); ctx.translate(0, 172); }
     ctx.strokeStyle = '#111'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(-6, -172, 5, 0, 7); ctx.arc(7, -172, 5, 0, 7); ctx.stroke();
     ctx.fillStyle = 'rgba(255,255,255,.8)'; ctx.fillRect(-8, -175, 3, 2); ctx.fillRect(5, -175, 3, 2);
+    ctx.restore();
+    if (bonked) {
+      ctx.fillStyle = '#B06A4E'; ctx.beginPath(); ctx.arc(-6, -190, 6, 0, 7); ctx.fill();
+      const tt = performance.now() / 170; ctx.fillStyle = '#FFE08A';
+      for (let i = 0; i < 4; i++) { const a = tt + i * 1.57; ctx.beginPath(); ctx.arc(Math.cos(a) * 26, -196 + Math.sin(a) * 6, 3.5, 0, 7); ctx.fill(); }
+    }
     ctx.fillStyle = '#B5302A'; ctx.beginPath(); ctx.arc(0, -181, 2, 0, 7); ctx.fill(); // bindi
     ctx.strokeStyle = '#3A1A12'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(-5, -162); ctx.lineTo(5, -162); ctx.stroke();
     ctx.restore();
@@ -988,7 +1024,7 @@
     drawKidBubbles();
     if (!bubble) return;
     const { x, footY, s, T } = bubble; bubble = null;
-    if (T.state === 'check' && T.line && T.t > .25) {
+    if (T.state === 'check' && T.line && T.t > .25 && !(T.bonked != null && G && G.t - T.bonked < .8)) {
       ctx.save(); let fs = 22; ctx.font = `700 ${fs}px "Kalam", cursive`;
       while (ctx.measureText(T.line).width + 28 > VW - 20 && fs > 14) { fs--; ctx.font = `700 ${fs}px "Kalam", cursive`; }
       const w = ctx.measureText(T.line).width + 28;
