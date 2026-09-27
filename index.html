@@ -219,14 +219,16 @@
   const now = () => performance.now();
 
   // ---------- layout ----------
+  let top0 = 0, bot0 = 1000;
   let W = 0, H = 0, dpr = 1, VW = 1000, sc = 1, ox = 0, oy = 0, cx = 500, u = 1, f = 1;
   function resize() {
     W = Math.max(1, innerWidth); H = Math.max(1, innerHeight); dpr = Math.min(2, devicePixelRatio || 1);
     cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
-    VW = clamp(W / H * 1000, 480, 1800);
+    VW = clamp(W / H * 1000, 700, 1800);
     sc = Math.min(W / VW, H / 1000);
     ox = (W - VW * sc) / 2; oy = (H - 1000 * sc) / 2;
-    cx = VW / 2; u = Math.min(VW, 1100) / 1000; f = clamp(u, .72, 1);
+    cx = VW / 2; u = Math.min(VW / 1240, 1.1); f = clamp(u, .72, 1);
+    top0 = -oy / sc; bot0 = (H - oy) / sc;   // visible virtual y-range, beyond 0..1000 on tall screens
     buildStudents();
   }
 
@@ -459,7 +461,12 @@
   function crashTarget(kind) {
     if (kind === 'fan') return { x: cx - 40 * u + 120 * u, y: 70, r: 7 };
     if (kind === 'tube') return { x: cx - 30 * u, y: 128, r: 5 };
-    const fwL = cx - 430 * u; return { x: (fwL - 90 * u - 60 + fwL - 20 * u) / 2, y: 340, r: 8 };
+    const w = windowSpan(); return { x: (w[0] + w[1]) / 2, y: 340, r: 8 };
+  }
+  function windowSpan() {
+    const fwL = cx - 430 * u, side = VW / 2 - 430 * u;
+    const wx2 = fwL - Math.min(20 * u, side * .15), wx1 = wx2 - Math.min(70 * u + 60, side * .72);
+    return [wx1, wx2];
   }
   function addBall(runs) {
     G.balls++; G.runs += runs; G.last.push(runs); if (G.last.length > 6) G.last.shift();
@@ -680,10 +687,10 @@
     const L = cx - VW / 2 - 20, R = cx + VW / 2 + 20;
     const fwL = cx - 430 * u, fwR = cx + 430 * u, top = 70, flo = 560;
     // ceiling
-    poly([[L, -10], [R, -10], [fwR, top], [fwL, top]], '#E4DCC6');
+    poly([[L, top0 - 10], [R, top0 - 10], [fwR, top], [fwL, top]], '#E4DCC6');
     // side walls: whitewash above, green oil-paint dado below
-    poly([[L, -10], [fwL, top], [fwL, flo], [L, 930]], '#D9D0B8');
-    poly([[R, -10], [fwR, top], [fwR, flo], [R, 930]], '#D2C9B0');
+    poly([[L, Math.min(-10, top0 - 10)], [fwL, top], [fwL, flo], [L, 930]], '#D9D0B8');
+    poly([[R, Math.min(-10, top0 - 10)], [fwR, top], [fwR, flo], [R, 930]], '#D2C9B0');
     poly([[L, 700], [fwL, 455], [fwL, flo], [L, 930]], '#557F63');
     poly([[R, 700], [fwR, 455], [fwR, flo], [R, 930]], '#4F775C');
     // front wall
@@ -692,13 +699,13 @@
     ctx.fillStyle = '#3F6049'; ctx.fillRect(fwL, 452, fwR - fwL, 4);
     // red-oxide floor
     const fg = ctx.createLinearGradient(0, flo, 0, 1000); fg.addColorStop(0, '#8E4331'); fg.addColorStop(1, '#A9563D');
-    poly([[fwL, flo], [fwR, flo], [R, 930], [R, 1010], [L, 1010], [L, 930]], fg);
+    poly([[fwL, flo], [fwR, flo], [R, 930], [R, bot0 + 10], [L, bot0 + 10], [L, 930]], fg);
     ctx.strokeStyle = 'rgba(40,10,5,.25)'; ctx.lineWidth = 1;
     for (let i = -6; i <= 6; i++) { ctx.beginPath(); ctx.moveTo(cx + i * 70 * u, flo); ctx.lineTo(cx + i * 240 * u, 1010); ctx.stroke(); }
     [600, 660, 750, 880].forEach(y => { ctx.beginPath(); ctx.moveTo(L, y); ctx.lineTo(R, y); ctx.stroke(); });
 
     // window on left wall with grill + sky
-    const wx1 = fwL - 90 * u - 60, wx2 = fwL - 20 * u;
+    const [wx1, wx2] = windowSpan();
     const wpts = [[wx1, 220], [wx2, 250], [wx2, 430], [wx1, 460]];
     const sky = ctx.createLinearGradient(0, 220, 0, 460); sky.addColorStop(0, '#A7D3E8'); sky.addColorStop(1, '#DDEFD8');
     poly(wpts, sky);
@@ -883,7 +890,7 @@
     const speed = broken ? 1.5 : 9;
     const a0 = time / 1000 * speed;
     ctx.save(); ctx.translate(x, y); ctx.rotate(Math.sin(time / 90) * .06 * wob);
-    ctx.fillStyle = '#6F7A74'; ctx.fillRect(-3, -80, 6, 72);
+    ctx.fillStyle = '#6F7A74'; ctx.fillRect(-3, Math.min(-80, top0 - 72 - 10), 6, Math.max(72, 72 - top0 + 10));
     // blades: flattened ellipse projection, motion-blurred
     for (let i = 0; i < 3; i++) {
       if (broken && i === 0) continue;
@@ -979,7 +986,7 @@
     const L = cx - VW / 2 - 20, R = cx + VW / 2 + 20;
     // my desk top
     const dg = ctx.createLinearGradient(0, 870, 0, 1000); dg.addColorStop(0, '#7A4A28'); dg.addColorStop(1, '#5E361C');
-    poly([[L, 890], [R, 890], [R, 1010], [L, 1010]], dg);
+    poly([[L, 890], [R, 890], [R, bot0 + 10], [L, bot0 + 10]], dg);
     ctx.fillStyle = '#4A2A15'; ctx.fillRect(L, 884, R - L, 8);
     ctx.save(); ctx.strokeStyle = 'rgba(30,14,5,.35)'; ctx.lineWidth = 1.2;
     for (let i = 0; i < 7; i++) { const y = 905 + i * 15; ctx.beginPath(); ctx.moveTo(L, y); ctx.bezierCurveTo(cx - 200, y + 6, cx + 200, y - 6, R, y + 2); ctx.stroke(); }
@@ -1068,7 +1075,7 @@
     let sx = 0, sy = 0;
     if (G && G.shake > 0 && !reduceMotion) { sx = rand(-1, 1) * G.shake * 18; sy = rand(-1, 1) * G.shake * 12; }
     ctx.setTransform(dpr * sc, 0, 0, dpr * sc, dpr * (ox + sx * sc), dpr * (oy + sy * sc));
-    ctx.save(); ctx.beginPath(); ctx.rect(cx - VW / 2, 0, VW, 1000); ctx.clip();
+    ctx.save(); ctx.beginPath(); ctx.rect(cx - VW / 2, top0, VW, bot0 - top0); ctx.clip();
     drawRoom(time);
     drawFan(time);
     const b = G && G.ball;
@@ -1082,9 +1089,9 @@
     if (prox > 0 && G.teacher.state !== 'away') {
       const vg = ctx.createRadialGradient(cx, 560, 200, cx, 560, 800);
       vg.addColorStop(0, 'rgba(60,0,0,0)'); vg.addColorStop(1, `rgba(60,0,0,${prox * .45})`);
-      ctx.fillStyle = vg; ctx.fillRect(cx - VW / 2, 0, VW, 1000);
+      ctx.fillStyle = vg; ctx.fillRect(cx - VW / 2, top0, VW, bot0 - top0);
     }
-    if (G && G.broken === 'tube') { ctx.fillStyle = 'rgba(10,15,25,.38)'; ctx.fillRect(cx - VW / 2, 0, VW, 1000); }
+    if (G && G.broken === 'tube') { ctx.fillStyle = 'rgba(10,15,25,.38)'; ctx.fillRect(cx - VW / 2, top0, VW, bot0 - top0); }
     drawForeground(time);
     drawBubble();
     drawFx();
