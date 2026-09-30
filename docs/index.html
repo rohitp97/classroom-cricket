@@ -81,6 +81,7 @@
   @media (hover: none) { .keys { display: none; } }
   #hideBtn small { display: block; font: 400 12px/1.2 var(--hand); letter-spacing: 0; margin-top: 3px; color: var(--pencil); }
   #hideBtn:active { transform: translate(2px, 3px); box-shadow: 1px 1px 0 var(--ink); }
+  #hideBtn.hold { background: var(--gold); box-shadow: 3px 4px 0 var(--ink), 0 0 0 5px rgba(233, 185, 73, .4); }
   #hideBtn:focus-visible, .btn:focus-visible { outline: 3px dashed var(--gold); outline-offset: 3px; }
   #muteBtn {
     position: fixed; z-index: 3; right: 16px; bottom: calc(16px + env(safe-area-inset-bottom, 0px));
@@ -187,7 +188,7 @@
   <div class="pct" id="riskPct">5%</div>
   <div class="bar"><i id="riskBar"></i></div>
 </div>
-<button id="hideBtn" type="button" hidden>HIDE<small><span class="keys">H / &darr; &middot; </span>act innocent</small></button>
+<button id="hideBtn" type="button" hidden><span class="lbl">HIDE</span><small><span class="keys">H / &darr; &middot; </span><span class="msg">act innocent</span></small></button>
 <button id="muteBtn" type="button" hidden>sound on</button>
 
 <div class="overlay" id="title">
@@ -207,7 +208,7 @@
       <li>Hear footsteps? See a shadow at the door? <span class="keys"><kbd>H</kbd> or </span><b>HIDE</b>, fast.</li>
       <li>Sixes are loud. The fan is old. The tube light is older.</li>
     </ol>
-    <p class="note">Survive 5 overs until the bell. Most people don't.</p>
+    <p class="note">Survive 5 overs. Play too well and someone notices.</p>
     <div class="row"><button class="btn" id="startBtn" type="button">Take guard</button></div>
   </div>
 </div>
@@ -293,12 +294,14 @@
       hidden: false, hideAnim: 0, hiddenSince: 0,
       swingAt: -1e9,
       ball: null, nextThrowAt: 1.6,
-      teacher: { state: 'away', t: 0, dur: 0, fake: false, next: rand(7, 10), prox: 0, line: '' },
+      teacher: { who: 'maam', state: 'away', t: 0, dur: 0, fake: false, next: rand(7, 10), prox: 0, line: '' },
       pops: [], parts: [], cracks: [],
       broken: null, dark: 0, fanBlade: null, fanWobble: 0,
       lookBack: 0, shake: 0, ending: null, endAt: 0, captions: [],
       clockMin: 0,
+      queue: [], seen: {}, peonVisits: 0, bStreak: 0, holding: false,
     };
+    hideHold = false; setHideLabel(false);
     students.forEach(st => st.hurt = null);
     updateHud();
   }
@@ -425,6 +428,11 @@
           t += 1 / rate * rand(.85, 1.15); }
       }
     },
+    heel(v) { if (!A.ctx) return; const t = A.ctx.currentTime; noiseHit(t, 'highpass', 3200, .8, .35 * v, .03); tone(t, 'square', 1700, 900, .07 * v, .05); tone(t + .004, 'sine', 210, 120, .18 * v, .06); },
+    sneaker(v) { if (!A.ctx) return; const t = A.ctx.currentTime; noiseHit(t, 'bandpass', 2400, 3, .18 * v, .05); tone(t, 'sine', 140, 80, .16 * v, .06); },
+    flip(v) { if (!A.ctx) return; const t = A.ctx.currentTime; noiseHit(t, 'bandpass', 1100, 1.2, .3 * v, .06); tone(t, 'sine', 120, 70, .2 * v, .07);
+      for (let i = 0; i < 4; i++) tone(t + i * .018, 'sine', rand(3200, 5200), 0, .05 * v, .12); },   // keys
+    whistle() { if (!A.ctx) return; const t = A.ctx.currentTime; tone(t, 'sine', 2600, 3100, .18, .35, .02); tone(t + .4, 'sine', 3100, 2500, .18, .3, .02); },
     bonk() { if (!A.ctx) return; const t = A.ctx.currentTime; tone(t, 'sine', 320, 140, .45, .12); noiseHit(t, 'bandpass', 900, 2, .2, .05); },
     kid(kind) { if (!A.ctx) return; const ac = A.ctx, t = ac.currentTime + (kind === 'ow' ? .08 : 0);
       const parts = kind === 'ow' ? [[0, .32, 620, 380]] : [[0, .16, 520, 560], [.2, .6, 640, 470]];   // "ow!" / "Ma-aaam!"
@@ -475,8 +483,8 @@
   // ---------- swing ----------
   function swing() {
     if (!G || G.phase !== 'play') return;
-    if (G.teacher.state === 'check') { caught('moved'); return; }
-    if (G.hidden) { G.hidden = false; return; }   // coming out of hiding costs the tap
+    if (G.teacher.state === 'check' && G.teacher.who !== 'peon') { caught('moved'); return; }
+    if (G.hidden) { if (!G.holding) G.hidden = false; return; }   // coming out of hiding costs the tap
     if (G.t - G.swingAt < .42) return;
     G.swingAt = G.t;
     const b = G.ball;
@@ -507,9 +515,10 @@
   }
   function crashChance() { return clamp(.05 + .14 * G.streak6 + .03 * G.sixes, 0, .85); }
 
-  function maamHead() {
+  const HEAD_Y = { maam: 172, maths: 176, pt: 176, peon: 158 };
+  function visitorHead() {
     const dw = Math.max(125 * u, 95), dx2 = cx + 395 * u, dx1 = dx2 - dw, sc2 = dw / 92;
-    return { x: (dx1 + dx2) / 2 + dw * .08, y: 560 - 172 * sc2, r: 4 + 3 * sc2 };
+    return { x: (dx1 + dx2) / 2 + dw * .08, y: 560 - (HEAD_Y[G.teacher.who] || 172) * sc2, r: 4 + 3 * sc2 };
   }
   function scoreShot(b, runs, dt) {
     const p = ballPos(b, clamp((G.t - b.t0) / b.dur, 0, 1));
@@ -541,7 +550,7 @@
     }
     const T = G.teacher;
     if (runs >= 4 && T.state === 'approach' && !T.fake && T.prox >= .4 && !G.ending) {
-      target = maamHead(); dur = .7; crash = null; b.bonk = 0; b.maam = true;
+      target = visitorHead(); dur = .7; crash = null; b.bonk = 0; b.maam = true;
       T.dur = Math.max(T.t + .01, T.t + dur - .2);   // door swings open a moment before the ball gets there
       G.maamShot = true;
     }
@@ -549,11 +558,18 @@
     b.crash = crash;
     addBall(runs);
   }
-  const MAAM_LINES = ['WHO THREW THAT?!', 'WHOSE ERASER IS THIS?!', 'Principal’s office. NOW.'];
-  function hitMaam(x, y) {
-    const T = G.teacher;
-    G.ending = 'maam'; G.endAt = G.t + 3.2; G.shake = .5; G.lookBack = 3.2; G.maamShot = false;
-    T.state = 'check'; T.t = .3; T.prox = 1; T.bonked = G.t; T.line = pick(MAAM_LINES);
+  const HIT_LINES = {
+    maam: ['WHO THREW THAT?!', 'WHOSE ERASER IS THIS?!', 'Principal’s office. NOW.'],
+    maths: ['WHO threw that?! I’m calculating the angle!', 'Whose eraser? Show your working!', 'Principal’s office. NOW.'],
+    pt: ['Arre! …Nice timing! …DETENTION!', 'Who threw that?! Fifty sit-ups!', 'Was that a yorker?!'],
+    peon: ['Arre baba re!', 'Yeh kya?! Meri topi!', 'Kaun hai yeh?!'],
+  };
+  const HIT_END = { maam: 'maam', maths: 'hit_maths', pt: 'hit_pt', peon: 'hit_peon' };
+  const HIT_ENDINGS = Object.values(HIT_END);
+  function hitVisitor(x, y) {
+    const T = G.teacher, who = T.who;
+    G.ending = HIT_END[who]; G.endAt = G.t + 3.2; G.shake = .5; G.lookBack = 3.2; G.maamShot = false;
+    T.state = 'check'; T.t = .3; T.prox = 1; T.bonked = G.t; T.line = pick(HIT_LINES[who]);
     S.bonk(); S.gasp(); S.ooh(false); setMurmur(0);
     pop('BONK!', x - 30, y - 30, { size: 64, life: .8, rise: 30, color: '#FFE08A' });
     burst(x, y, 14, { colors: ['#FFE08A', '#FFFFFF'], spread: 200, up: 240, size: .9, life: .7 });
@@ -593,7 +609,9 @@
   }
   function addBall(runs) {
     G.balls++; G.runs += runs; G.last.push(runs); if (G.last.length > 6) G.last.shift();
+    G.bStreak = runs >= 4 ? G.bStreak + 1 : 0;
     updateHud();
+    checkTriggers();
   }
 
   // ---------- teacher ----------
@@ -602,7 +620,55 @@
     tube: ['Who switched off— WHO BROKE THAT?!', 'I heard that from the staff room!', 'Nobody move. NOBODY.'],
     window: ['I heard that from the staff room!', 'Whose eraser hit the principal’s car?!', 'Nobody move. NOBODY.'],
   };
-  const SPEECH_OK = ['Hmm.', 'Why is it so quiet?', 'Good. Keep reading.', 'Page 42. All of you.', 'Who is laughing?'];
+  // Who walks in. Each has a different walk (cue), warning length and what it takes to get past them.
+  const VISITORS = {
+    maam:  { step: 'step',    dur: [2.5, 1.5], checkT: 1.7, cue: ['tak…', 'tak… tak…', 'tak… tak… tak…'], stormCue: 'TAK TAK TAK TAK' },
+    maths: { step: 'heel',    dur: [1.8, 1.3], checkT: 3.4, cue: ['tik…', 'tik… tik…', 'tik-tik-tik!'], hold: true },
+    pt:    { step: 'sneaker', dur: [2.2, 1.5], checkT: 1.7, cue: ['PHEEE…', 'PHEE-PHEE…', 'PHEEEEEE!'] },
+    peon:  { step: 'flip',    dur: [2.2, 1.6], checkT: 2.2, cue: ['chhan…', 'chhan… chhan…', 'chhan-chhan-chhan'], stormCue: 'CHHAN CHHAN CHHAN' },
+  };
+  const SPEECH_OK = {
+    maam: ['Hmm.', 'Why is it so quiet?', 'Good. Keep reading.', 'Page 42. All of you.', 'Who is laughing?'],
+    maths: ['Hmm. Sums 1 to 10. Now.', 'Numbers, not noise.', 'I heard counting. Count in silence.', 'Show your working. All of you.'],
+    pt: ['Anyone seen a cricket ball? Never mind.', 'Trials on Monday. Be there.', 'Who hit that shot? …Nobody? OK.', 'Stay fit, class!'],
+  };
+  const PEON_SUSPECT = ['Kya hua? Sab theek? …Hmm.', 'Itne chup kyun ho sab?', 'Sab padh rahe ho? Sach mein?'];
+  const PEON_TAKES = ['Circular! Eraser jama karo.', 'Circular! …And this eraser is mine now.', 'Eraser? Confiscated. Circular? Later.'];
+  const PEON_STORM = ['Kaun tha?! Safai kaun karega?!', 'Meri jhadu! Aur ab yeh?!', 'Phir se?! Kaun tha yeh?!'];
+  const CAUGHT_END = { maam: 'caught', maths: 'caught_maths', pt: 'caught_pt' };
+  const CAUGHT_DOOR = { maam: 'WHAT is going on here?', maths: 'Explain this. In numbers.', pt: 'THERE he is! The batter!' };
+  const CAUGHT_MOVED = { maam: 'I SAW that.', maths: 'I SAW that. Count: one.', pt: 'Freeze! …Nice form though.' };
+
+  function pickVisitor() {
+    if (G.teacher.complaint) return 'maam';
+    if (G.queue.length) return G.queue.shift();
+    if (G.balls >= 6 && G.peonVisits < 2 && Math.random() < .3) { G.peonVisits++; return 'peon'; }
+    return 'maam';
+  }
+  function queueVisitor(w, delay) {
+    G.seen[w] = true; G.queue.push(w);
+    const T = G.teacher;
+    if (T.state === 'away') T.next = Math.min(T.next, delay + rand(0, .8));
+  }
+  // playing well gets you noticed
+  function checkTriggers() {
+    if (G.ending) return;
+    if (!G.seen.maths && G.runs >= 30 && G.balls <= 18) queueVisitor('maths', 1.4);          // 30+ before 3 overs
+    else if (!G.seen.pt && (G.bStreak >= 3 || G.streak6 >= 2)) queueVisitor('pt', 1.8);      // 3 boundaries or 2 sixes in a row
+  }
+  function peonVisit() {
+    const T = G.teacher;
+    if (G.hidden) {   // hiding from the peon looks guilty: the real teacher comes next
+      T.line = pick(PEON_SUSPECT); G.queue.unshift('maam');
+      G.captions.push({ text: 'Peon bhaiya is suspicious…', t: .3, life: 2 });
+    } else {          // he takes the eraser: dot ball, and the thrower needs a new one
+      T.line = pick(PEON_TAKES);
+      if (G.ball && G.ball.state === 'flight') { G.ball.state = 'gone'; G.ball = null; }
+      G.streak6 = 0; addBall(0);
+      G.nextThrowAt = Math.max(G.nextThrowAt, G.t + 3);
+      pop('Confiscated. Dot ball.', cx, 520, { size: 40, life: 1.4 });
+    }
+  }
   function teacherUpdate(dt) {
     const T = G.teacher;
     T.t += dt;
@@ -610,34 +676,43 @@
       T.next -= dt;
       if (T.next <= 0 && (!G.ending || T.storm)) {
         const d = difficulty();
-        T.state = 'approach'; T.t = 0; T.dur = T.storm ? .95 : lerp(2.5, 1.5, d) * rand(.92, 1.08);
-        T.fake = !T.storm && !T.complaint && G.balls > 3 && Math.random() < .25;
+        T.who = T.storm ? (G.broken === 'tube' ? 'peon' : 'maam') : pickVisitor();   // after the tube light, peon bhaiya comes with a broom
+        T.fake = !T.storm && !T.complaint && T.who === 'maam' && G.balls > 3 && Math.random() < .25;
+        if (T.fake) T.who = 'peon';   // just the peon walking past
+        const V = VISITORS[T.who];
+        T.state = 'approach'; T.t = 0; T.dur = T.storm ? .95 : lerp(V.dur[0], V.dur[1], d) * rand(.92, 1.08);
         T.stepAcc = 0;
+        if (T.who === 'pt' && !T.fake) S.whistle();
       }
     } else if (T.state === 'approach') {
+      const V = VISITORS[T.who];
       const k = T.t / T.dur;
       T.prox = T.fake ? (k < .7 ? k : Math.max(0, .7 - (k - .7) * 1.4)) : k;
       T.stepAcc -= dt;
       const interval = T.storm ? .15 : lerp(.52, .3, clamp(k, 0, 1));   // storming in: she's running
-      if (T.stepAcc <= 0 && T.prox > .02) { T.stepAcc = interval; S.step(clamp(.25 + T.prox, .2, 1.1)); }
+      if (T.stepAcc <= 0 && T.prox > .02) { T.stepAcc = interval; S[V.step](clamp(.25 + T.prox, .2, 1.1)); }
       if (T.fake && k >= 1.2) {
         T.state = 'away'; T.prox = 0; T.next = rand(6, 11);
         G.captions.push({ text: '…just the peon walking past.', t: 0, life: 1.8 });
       } else if (!T.fake && k >= 1) {
         T.state = 'check'; T.t = 0; S.creak();
         if (G.maamShot) { T.line = ''; return; }
-        if (T.storm) { T.line = pick(STORM_LINES[G.broken]); G.shake = .3; S.gasp(); G.lookBack = 3; G.endAt = Math.max(G.endAt, G.t + 2.4); return; }
-        if (!G.hidden) { T.complaint = null; caught('door'); return; }
-        T.line = T.complaint ? `Who hit ${T.complaint}?` : pick(SPEECH_OK); T.complaint = null;
+        if (T.storm) { T.line = T.who === 'peon' ? pick(PEON_STORM) : pick(STORM_LINES[G.broken]); G.shake = .3; S.gasp(); G.lookBack = 3; G.endAt = Math.max(G.endAt, G.t + 2.4); return; }
+        if (T.who === 'peon') { peonVisit(); return; }
+        if (V.hold ? !G.holding : !G.hidden) { T.complaint = null; caught('door'); return; }
+        T.line = T.complaint ? `Who hit ${T.complaint}?` : pick(SPEECH_OK[T.who]); T.complaint = null;
+        if (T.who === 'pt') S.whistle();
       }
     } else if (T.state === 'check') {
       T.prox = 1;
-      if (T.t > 1.7 && !G.ending) { T.state = 'leave'; T.t = 0; S.creak(); }
+      const V = VISITORS[T.who];
+      if (V.hold && !G.ending && !G.holding && !G.maamShot) { caught('moved'); return; }   // Maths sir walks the aisle: keep HIDE held down
+      if (T.t > V.checkT && !G.ending) { T.state = 'leave'; T.t = 0; S.creak(); }
     } else if (T.state === 'leave') {
       T.prox = Math.max(0, 1 - T.t / .8);
       if (T.t > .8) {
-        T.state = 'away'; T.prox = 0;
-        T.next = (G.balls > 12 && Math.random() < .28) ? rand(2.2, 3.4) : rand(7, 14);
+        T.state = 'away'; T.prox = 0; T.fake = false;
+        T.next = G.queue.length ? rand(1.4, 2.4) : (G.balls > 12 && Math.random() < .28) ? rand(2.2, 3.4) : rand(7, 14);
         G.nextThrowAt = Math.max(G.nextThrowAt, G.t + 1.1);
       }
     }
@@ -666,6 +741,26 @@
       head: n => `You scored <b>${n}</b> runs before you hit Ma’am. On the head.`, short: 'hitting Ma’am on the head', stamp: 'SUSPENDED', eyebrow: 'Principal’s office',
       lines: ['Her specs survived. You will not.', 'Your parents have been called. Both of them.', 'The eraser has been kept as evidence.', 'Legends say the whole corridor heard the bonk.'],
     },
+    caught_maths: {
+      head: n => `You scored <b>${n}</b> runs before Maths sir did the math.`, short: 'Maths sir did the math', stamp: 'CAUGHT', eyebrow: 'Remark in the diary',
+      lines: ['“34 runs. And your test score? Also 34. Coincidence?”', 'He counted your runs. Then he counted your marks. Nobody spoke.', 'Homework: 40 sums. Show your working. Including the sixes.', '“Excellent strike rate. Now do the sums.”'],
+    },
+    caught_pt: {
+      head: n => `You scored <b>${n}</b> runs before PT sir spotted your talent.`, short: 'PT sir spotted my talent', stamp: 'SELECTED', ok: true, eyebrow: 'Sports notice board',
+      lines: ['Selected for the school team. Also suspended. Same notice.', '“Who taught you that cover drive?” Nobody. That was the problem.', 'Captain of the Under-14s. Detention till Friday. Both true.', 'He blew the whistle twice. Somehow that was worse.'],
+    },
+    hit_maths: {
+      head: n => `You scored <b>${n}</b> runs before you hit Maths sir. On the head.`, short: 'hitting Maths sir on the head', stamp: 'SUSPENDED', eyebrow: 'Principal’s office',
+      lines: ['He recalculated. The answer was detention.', 'The eraser landed exactly where he’d drawn the angle.', 'His tie survived. Your marks won’t.'],
+    },
+    hit_pt: {
+      head: n => `You scored <b>${n}</b> runs before you hit PT sir. On the head.`, short: 'hitting PT sir on the head', stamp: 'SUSPENDED', eyebrow: 'Principal’s office',
+      lines: ['“Nice timing!” he said. Then he remembered.', 'He asked for a re-do. Then detention.', 'Captain? No. Fifty sit-ups.'],
+    },
+    hit_peon: {
+      head: n => `You scored <b>${n}</b> runs before you hit Peon bhaiya. On the cap.`, short: 'hitting Peon bhaiya', stamp: 'OOPS', eyebrow: 'Staff room notice',
+      lines: ['He’s seen worse. He has also seen you.', 'He took the eraser. It was already his.', 'He said nothing. He just jangled the keys.'],
+    },
     bell: {
       head: n => `You scored <b>${n}</b> runs before the bell rang.`, short: 'the bell rang (not out!)', stamp: 'NOT OUT', eyebrow: 'Last bench legend',
       lines: ['Not out. Nobody will believe you.', 'Same time tomorrow. Maths period.', 'Ma’am suspects nothing. Ma’am suspects everything.'],
@@ -674,11 +769,13 @@
 
   function caught(how) {
     if (G.ending) return;
-    const T = G.teacher; T.state = 'check'; T.t = 0; T.prox = 1; T.line = how === 'moved' ? 'I SAW that.' : 'WHAT is going on here?';
-    G.ending = 'caught'; G.endAt = G.t + 2.1; G.shake = .25;
+    const T = G.teacher, who = CAUGHT_END[T.who] ? T.who : 'maam';
+    T.state = 'check'; T.t = 0; T.prox = 1;
+    T.line = (how === 'moved' ? CAUGHT_MOVED : CAUGHT_DOOR)[who];
+    G.ending = CAUGHT_END[who]; G.endAt = G.t + 2.1; G.shake = .25;
     if (G.ball && G.ball.state === 'flight') G.ball.state = 'gone';
     S.gasp(); setMurmur(0);
-    pop('CAUGHT!', cx, 470, { size: 110, life: 2.2, rise: 10, color: '#FFB3A6' });
+    pop(who === 'pt' ? 'SPOTTED!' : 'CAUGHT!', cx, 470, { size: 110, life: 2.2, rise: 10, color: '#FFB3A6' });
   }
 
   function doCrash(kind, x, y) {
@@ -705,7 +802,7 @@
   function finish() {
     G.phase = 'over';
     const kind = G.ending, E = ENDINGS[kind];
-    $('stamp').textContent = E.stamp; $('stamp').classList.toggle('ok', kind === 'bell');
+    $('stamp').textContent = E.stamp; $('stamp').classList.toggle('ok', !!E.ok || kind === 'bell');
     $('endEyebrow').textContent = E.eyebrow;
     $('endHead').innerHTML = E.head(G.runs);
     $('endPunch').textContent = pick(E.lines);
@@ -746,6 +843,8 @@
     G.t += dt;
     const playing = G.phase === 'play';
     if (playing) { teacherUpdate(dt); hurtUpdate(); }
+    const needHold = playing && G.teacher.who === 'maths' && (G.teacher.state === 'approach' || G.teacher.state === 'check');
+    if (needHold !== hideHold) { hideHold = needHold; setHideLabel(needHold); }
 
     // hide animation / auto-unhide when nothing is coming
     G.hideAnim = clamp(G.hideAnim + (G.hidden ? dt : -dt) / .14, 0, 1);
@@ -780,7 +879,7 @@
         b.r = lerp(F.r0, F.target.r, e);
         if (k >= 1) {
           if (b.crash) { doCrash(b.crash, F.target.x, F.target.y); G.ball = null; }
-          else if (b.maam) { hitMaam(F.target.x, F.target.y); G.ball = null; }
+          else if (b.maam) { hitVisitor(F.target.x, F.target.y); G.ball = null; }
           else if (b.bonk) { bonk(students[b.bonk - 1], F.target.x, F.target.y); G.ball = null; G.nextThrowAt = G.t + rand(1.4, 1.9); }
           else { G.ball = null; G.nextThrowAt = G.t + rand(.8, 1.3); }
         }
@@ -951,9 +1050,12 @@
       if (T.fake && T.state === 'approach') sx = gx + gw * (1.4 - (T.t / T.dur) * 1.3);   // walks across, never turns in
       ctx.fillStyle = `rgba(40,30,35,${.12 + p * .7})`;
       const hr = 10 + p * 26; ctx.filter = `blur(${Math.round(10 - p * 7)}px)`;
-      ctx.beginPath(); ctx.arc(sx, gy + gh - hr * 1.7, hr, 0, 7); ctx.fill();          // head + bun
-      ctx.beginPath(); ctx.arc(sx + hr * .7, gy + gh - hr * 2.2, hr * .45, 0, 7); ctx.fill();
-      ctx.beginPath(); ctx.ellipse(sx, gy + gh + hr * .6, hr * 2, hr * 1.5, 0, 0, 7); ctx.fill();
+      const who = T.who || 'maam';
+      ctx.beginPath(); ctx.arc(sx, gy + gh - hr * 1.7, hr * (who === 'peon' ? .85 : 1), 0, 7); ctx.fill();   // head
+      if (who === 'maam') { ctx.beginPath(); ctx.arc(sx + hr * .7, gy + gh - hr * 2.2, hr * .45, 0, 7); ctx.fill(); }   // bun
+      if (who === 'pt' || who === 'peon') ctx.fillRect(sx - hr * .95, gy + gh - hr * (who === 'pt' ? 2.55 : 2.4), hr * 1.9, hr * .4);   // cap
+      ctx.beginPath(); ctx.ellipse(sx, gy + gh + hr * .6, hr * (who === 'maam' ? 2 : 2.4), hr * 1.5, 0, 0, 7); ctx.fill();   // shoulders
+      if (who === 'maths') { ctx.lineWidth = Math.max(2, hr * .2); ctx.strokeStyle = ctx.fillStyle; ctx.beginPath(); ctx.moveTo(sx + hr * 1.7, gy + gh); ctx.lineTo(sx + hr * 2.9, gy + gh - hr * 2.4); ctx.stroke(); }   // pointer stick
       ctx.restore(); ctx.filter = 'none';
     }
     ctx.strokeStyle = '#5A3219'; ctx.lineWidth = 3; ctx.strokeRect(gx, gy, gw, gh);
@@ -970,13 +1072,13 @@
       ctx.save(); ctx.font = `700 ${Math.round(18 + T.prox * 16)}px "Cabin Sketch", cursive`; ctx.textAlign = 'center';
       ctx.fillStyle = `rgba(255,224,138,${.4 + T.prox * .6})`;
       const beat = Math.floor(T.t / .35) % 3;
-      ctx.fillText(T.storm ? 'TAK TAK TAK TAK' : ['tak…', 'tak… tak…', 'tak… tak… tak…'][beat], (dx1 + dx2) / 2, dy1 - 18);
+      const V = VISITORS[T.who || 'maam'];
+      ctx.fillText(T.storm && V.stormCue ? V.stormCue : V.cue[beat], (dx1 + dx2) / 2, dy1 - 18);
       ctx.restore();
     }
   }
 
-  function drawTeacher(x, footY, s, T) {
-    ctx.save(); ctx.translate(x, footY); ctx.scale(s, s);
+  function drawMaam(T, bonked) {
     // saree: maroon with a gold border, pallu over the shoulder
     ctx.fillStyle = '#7E1F2C';
     ctx.beginPath(); ctx.moveTo(-34, 0); ctx.lineTo(-26, -150); ctx.quadraticCurveTo(0, -175, 26, -150); ctx.lineTo(36, 0); ctx.closePath(); ctx.fill();
@@ -990,18 +1092,87 @@
     ctx.fillStyle = '#1B1412'; ctx.beginPath(); ctx.arc(0, -178, 17, Math.PI * 1.05, Math.PI * 1.95); ctx.fill();
     ctx.beginPath(); ctx.arc(14, -184, 8, 0, 7); ctx.fill();   // bun
     // spectacles (knocked crooked if she's just been hit)
-    const bonked = T.bonked != null && G && G.ending === 'maam';
     ctx.save(); if (bonked) { ctx.translate(2, -168); ctx.rotate(.35); ctx.translate(0, 172); }
     ctx.strokeStyle = '#111'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(-6, -172, 5, 0, 7); ctx.arc(7, -172, 5, 0, 7); ctx.stroke();
     ctx.fillStyle = 'rgba(255,255,255,.8)'; ctx.fillRect(-8, -175, 3, 2); ctx.fillRect(5, -175, 3, 2);
     ctx.restore();
-    if (bonked) {
-      ctx.fillStyle = '#B06A4E'; ctx.beginPath(); ctx.arc(-6, -190, 6, 0, 7); ctx.fill();
-      const tt = performance.now() / 170; ctx.fillStyle = '#FFE08A';
-      for (let i = 0; i < 4; i++) { const a = tt + i * 1.57; ctx.beginPath(); ctx.arc(Math.cos(a) * 26, -196 + Math.sin(a) * 6, 3.5, 0, 7); ctx.fill(); }
-    }
     ctx.fillStyle = '#B5302A'; ctx.beginPath(); ctx.arc(0, -181, 2, 0, 7); ctx.fill(); // bindi
     ctx.strokeStyle = '#3A1A12'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(-5, -162); ctx.lineTo(5, -162); ctx.stroke();
+    return -172;
+  }
+  function drawMaths(T, bonked) {
+    ctx.fillStyle = '#454A58'; ctx.fillRect(-22, -84, 20, 84); ctx.fillRect(2, -84, 20, 84);        // trousers
+    ctx.fillStyle = '#1B1B1E'; ctx.fillRect(-26, -6, 26, 6); ctx.fillRect(2, -6, 26, 6);            // shoes
+    ctx.fillStyle = '#A8C6E0'; ctx.beginPath(); ctx.roundRect(-32, -160, 64, 82, [22, 22, 4, 4]); ctx.fill();   // half-sleeve shirt
+    ctx.fillStyle = '#2A2F3A'; ctx.fillRect(-32, -84, 64, 6);                                       // belt
+    ctx.fillStyle = '#8B2A2A'; ctx.beginPath(); ctx.moveTo(-4, -158); ctx.lineTo(4, -158); ctx.lineTo(6, -112); ctx.lineTo(0, -102); ctx.lineTo(-6, -112); ctx.closePath(); ctx.fill();   // tie
+    ctx.strokeStyle = '#8fa9c2'; ctx.lineWidth = 1.5; ctx.strokeRect(12, -140, 14, 16);             // pocket with three pens
+    ctx.fillStyle = '#C8323A'; ctx.fillRect(15, -146, 2, 10); ctx.fillStyle = '#23407A'; ctx.fillRect(19, -146, 2, 10); ctx.fillStyle = '#111'; ctx.fillRect(23, -146, 2, 10);
+    ctx.fillStyle = '#B98460'; ctx.fillRect(-44, -150, 12, 44); ctx.fillRect(32, -150, 12, 44);     // arms
+    ctx.fillStyle = '#F4F1E6'; ctx.fillRect(-45, -108, 4, 12);                                      // chalk
+    ctx.fillStyle = '#6B4A2A'; ctx.fillRect(30, -108, 18, 10); ctx.fillStyle = '#EDEBDD'; ctx.fillRect(30, -100, 18, 3);   // duster
+    ctx.fillStyle = '#B98460'; ctx.beginPath(); ctx.arc(0, -176, 17, 0, 7); ctx.fill();            // head
+    ctx.fillStyle = '#1F1714'; ctx.beginPath(); ctx.arc(0, -181, 17, Math.PI * 1.02, Math.PI * 1.98); ctx.fill();   // side-parted hair
+    ctx.save(); if (bonked) { ctx.translate(2, -172); ctx.rotate(.35); ctx.translate(0, 176); }
+    ctx.strokeStyle = '#111'; ctx.lineWidth = 2.5; ctx.strokeRect(-13, -181, 11, 9); ctx.strokeRect(2, -181, 11, 9);   // thick glasses
+    ctx.beginPath(); ctx.moveTo(-2, -177); ctx.lineTo(2, -177); ctx.stroke();
+    ctx.restore();
+    ctx.fillStyle = '#1F1714'; ctx.fillRect(-9, -168, 18, 4);                                       // moustache
+    return -176;
+  }
+  function drawPT(T, bonked) {
+    ctx.fillStyle = '#1F3558'; ctx.fillRect(-22, -84, 20, 84); ctx.fillRect(2, -84, 20, 84);        // track pants
+    ctx.fillStyle = '#F4F1E6'; ctx.fillRect(-22, -84, 3, 84); ctx.fillRect(19, -84, 3, 84);         // stripes
+    ctx.fillRect(-26, -7, 26, 7); ctx.fillRect(2, -7, 26, 7);                                       // white sneakers
+    ctx.fillStyle = '#23407A'; ctx.beginPath(); ctx.roundRect(-34, -162, 68, 82, [24, 24, 4, 4]); ctx.fill();   // track jacket
+    ctx.fillStyle = '#F4F1E6'; ctx.fillRect(-2, -158, 4, 76); ctx.fillRect(-34, -100, 68, 3);
+    ctx.strokeStyle = '#C8323A'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(-8, -160); ctx.lineTo(0, -120); ctx.lineTo(8, -160); ctx.stroke();   // whistle string
+    ctx.fillStyle = '#C9CED2'; ctx.beginPath(); ctx.roundRect(-6, -124, 12, 8, 3); ctx.fill();      // whistle
+    ctx.fillStyle = '#23407A'; ctx.fillRect(-46, -150, 14, 44); ctx.fillRect(32, -150, 14, 30);     // arms
+    ctx.fillStyle = '#A9744F'; ctx.fillRect(-46, -108, 14, 10); ctx.fillRect(32, -122, 14, 10);     // hands
+    ctx.fillStyle = '#9C7A4A'; ctx.fillRect(-58, -118, 22, 30); ctx.fillStyle = '#F4F1E6'; ctx.fillRect(-55, -115, 16, 24);   // clipboard
+    ctx.fillStyle = '#A9744F'; ctx.beginPath(); ctx.arc(0, -176, 17, 0, 7); ctx.fill();            // head
+    ctx.fillStyle = '#C8323A'; ctx.beginPath(); ctx.arc(0, -182, 17, Math.PI, 0); ctx.fill(); ctx.fillRect(-2, -184, 28, 5);   // cap + brim
+    ctx.save(); if (bonked) ctx.rotate(.25);
+    ctx.fillStyle = '#111'; ctx.fillRect(-8, -178, 3.5, 4); ctx.fillRect(5, -178, 3.5, 4);
+    ctx.restore();
+    ctx.strokeStyle = '#3A1A12'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(0, -170, 7, .2, Math.PI - .2); ctx.stroke();   // grin
+    ctx.fillStyle = 'rgba(30,20,15,.35)'; ctx.fillRect(-10, -166, 20, 4);                           // stubble
+    return -176;
+  }
+  function drawPeon(T, bonked) {
+    ctx.fillStyle = '#A8935C'; ctx.fillRect(-20, -78, 18, 78); ctx.fillRect(2, -78, 18, 78);        // khaki trousers
+    ctx.fillStyle = '#4A3B22'; ctx.fillRect(-24, -6, 24, 6); ctx.fillRect(2, -6, 24, 6);            // chappals
+    ctx.fillStyle = '#B9A468'; ctx.beginPath(); ctx.roundRect(-30, -146, 60, 72, [20, 20, 4, 4]); ctx.fill();   // khaki shirt
+    ctx.fillStyle = '#8F7C48'; ctx.fillRect(-30, -78, 60, 6);
+    ctx.strokeStyle = '#C9CED2'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(20, -70, 6, 0, 7); ctx.stroke();   // key ring
+    ctx.fillStyle = '#C9A24A'; ctx.fillRect(16, -64, 3, 10); ctx.fillRect(21, -64, 3, 8); ctx.fillRect(26, -64, 3, 11);
+    ctx.fillStyle = '#7A4B33'; ctx.fillRect(-42, -136, 12, 40); ctx.fillRect(30, -136, 12, 40);     // arms
+    if (T.storm) {   // broom, after something breaks
+      ctx.strokeStyle = '#7A5A2E'; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(36, -156); ctx.lineTo(38, -22); ctx.stroke();
+      ctx.fillStyle = '#C9B26B'; ctx.beginPath(); ctx.moveTo(38, -30); ctx.lineTo(24, 0); ctx.lineTo(52, 0); ctx.closePath(); ctx.fill();
+    } else {         // circular in hand
+      ctx.save(); ctx.translate(-36, -100); ctx.rotate(-.2); ctx.fillStyle = '#F4F1E6'; ctx.fillRect(-10, -14, 22, 30); ctx.fillStyle = '#C8323A'; ctx.fillRect(-6, 6, 8, 6); ctx.restore();
+    }
+    ctx.fillStyle = '#7A4B33'; ctx.beginPath(); ctx.arc(0, -158, 16, 0, 7); ctx.fill();            // head
+    ctx.fillStyle = '#F4F1E6'; ctx.beginPath(); ctx.moveTo(-16, -166); ctx.lineTo(16, -166); ctx.lineTo(11, -184); ctx.lineTo(-11, -184); ctx.closePath(); ctx.fill();   // white cap
+    ctx.save(); if (bonked) ctx.rotate(.2);
+    ctx.fillStyle = '#111'; ctx.fillRect(-8, -161, 3.5, 4); ctx.fillRect(5, -161, 3.5, 4);
+    ctx.restore();
+    ctx.fillStyle = '#231A17'; ctx.fillRect(-9, -151, 18, 3.5);                                     // moustache
+    ctx.strokeStyle = '#3A1A12'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(0, -148, 5, .2, Math.PI - .2); ctx.stroke();
+    return -158;
+  }
+  const TEACHER_DRAW = { maam: drawMaam, maths: drawMaths, pt: drawPT, peon: drawPeon };
+  function drawTeacher(x, footY, s, T) {
+    ctx.save(); ctx.translate(x, footY); ctx.scale(s, s);
+    const bonked = T.bonked != null && G && HIT_ENDINGS.includes(G.ending);
+    const hy = (TEACHER_DRAW[T.who] || drawMaam)(T, bonked);
+    if (bonked) {   // bump and circling stars
+      ctx.fillStyle = '#B06A4E'; ctx.beginPath(); ctx.arc(-6, hy - 18, 6, 0, 7); ctx.fill();
+      const tt = performance.now() / 170; ctx.fillStyle = '#FFE08A';
+      for (let i = 0; i < 4; i++) { const a = tt + i * 1.57; ctx.beginPath(); ctx.arc(Math.cos(a) * 26, hy - 24 + Math.sin(a) * 6, 3.5, 0, 7); ctx.fill(); }
+    }
     ctx.restore();
     bubble = { x, footY, s, T };   // drawn last, so the door leaf never covers it
   }
@@ -1318,6 +1489,19 @@
   }
 
   // ---------- input ----------
+  let hideHold = false, holdPointer = null;
+  function setHideLabel(h) {
+    const b = $('hideBtn');
+    b.classList.toggle('hold', h);
+    b.querySelector('.lbl').textContent = h ? 'HOLD' : 'HIDE';
+    b.querySelector('.msg').textContent = h ? 'hold it down!' : 'act innocent';
+  }
+  function releaseHide() {
+    holdPointer = null;
+    if (!G) return;
+    G.holding = false;
+    if (G.teacher.who === 'maths' && G.teacher.state === 'approach') G.hidden = false;
+  }
   function hide() {
     if (!G || G.phase !== 'play') return;
     if (G.teacher.state === 'check' || G.teacher.state === 'leave') return;
@@ -1328,10 +1512,14 @@
     const k = e.key.toLowerCase();
     if (!$('title').hidden || !$('end').hidden) { if ((k === 'enter' || k === ' ') && !['BUTTON', 'INPUT'].includes(document.activeElement?.tagName)) { e.preventDefault(); start(); } return; }
     if (k === ' ' || k === 'enter' || k === 'arrowup' || k === 'w') { e.preventDefault(); audioInit(); swing(); }
-    else if (k === 'h' || k === 'arrowdown' || k === 's') { e.preventDefault(); audioInit(); hide(); }
+    else if (k === 'h' || k === 'arrowdown' || k === 's') { e.preventDefault(); audioInit(); if (G) G.holding = true; hide(); }
   });
+  addEventListener('keyup', e => { const k = e.key.toLowerCase(); if (k === 'h' || k === 'arrowdown' || k === 's') releaseHide(); });
+  addEventListener('pointerup', e => { if (e.pointerId === holdPointer) releaseHide(); });
+  addEventListener('pointercancel', e => { if (e.pointerId === holdPointer) releaseHide(); });
+  addEventListener('blur', releaseHide);
   cv.addEventListener('pointerdown', e => { e.preventDefault(); audioInit(); swing(); });
-  $('hideBtn').addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); audioInit(); hide(); });
+  $('hideBtn').addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); audioInit(); holdPointer = e.pointerId; if (G) G.holding = true; hide(); });
   $('hideBtn').addEventListener('click', e => { if (e.detail === 0) hide(); });   // keyboard activation
   function syncBatPick() {
     document.querySelectorAll('.batpick input').forEach(i => { i.checked = i.value === batKind; });
